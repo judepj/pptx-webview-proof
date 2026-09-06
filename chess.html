@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Greek gift</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #ffffff; height: 100%; }
+  body {
+    font-family: Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    color: #222222;
+    display: flex; align-items: center; justify-content: center; gap: 40px;
+    padding: 18px; box-sizing: border-box;
+  }
+  #boardwrap { flex: 0 0 auto; }
+  svg { display: block; width: min(88vh, 56vw, 660px); height: auto; }
+  #side { flex: 0 1 340px; }
+  h1 { font-size: 21px; font-weight: normal; margin: 0 0 6px 0; }
+  p  { font-size: 14px; line-height: 1.5; color: #444444; margin: 0 0 12px 0; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: #666666; }
+  button {
+    font-family: inherit; font-size: 15px; color: #ffffff;
+    background: #2b5d8a; border: 0; border-radius: 4px;
+    padding: 9px 18px; cursor: pointer;
+  }
+  button:hover  { background: #37729f; }
+  button:disabled { background: #b8c4cd; cursor: default; }
+  #say { font-size: 14px; color: #2b5d8a; min-height: 1.4em; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div id="boardwrap"><svg id="board" viewBox="0 0 512 512"
+       role="img" aria-label="Chess position before the Greek gift sacrifice"></svg></div>
+  <div id="side">
+    <h1>The Greek gift</h1>
+    <p>After 1.e4 e6 2.d4 d5 3.Nc3 Nf6 4.Bg5 Be7 5.e5 Nfd7 6.Bxe7 Qxe7 7.f4 O&#8209;O 8.Nf3 c5 9.Bd3
+       the light&#8209;squared bishop stares down the b1&#8211;h7 diagonal. Black has just castled
+       into it.</p>
+    <p>The bishop is not worth a pawn. It is worth the king.</p>
+    <button id="go">Show the sacrifice</button>
+    <div id="say"></div>
+    <p style="margin-top:14px"><code id="fen"></code></p>
+  </div>
+
+<script>
+// FEN produced and legality-verified with python-chess 1.11.2:
+//   board.push_san(m) for e4 e6 d4 d5 Nc3 Nf6 Bg5 Be7 e5 Nfd7 Bxe7 Qxe7 f4 O-O Nf3 c5 Bd3
+var FEN = "rnb2rk1/pp1nqppp/4p3/2ppP3/3P1P2/2NB1N2/PPP3PP/R2QK2R b KQ - 1 9";
+
+var S = 64;                                   // square edge, px in viewBox units
+var LIGHT = "#efe6d4", DARK = "#b6a184";
+var HL_FROM = "#dbc46a", HL_TO = "#d3705c", HL_NEXT = "#7fa8c9";
+var GLYPH = {
+  K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
+  k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟"
+};
+
+var SVGNS = "http://www.w3.org/2000/svg";
+function el(name, attrs) {
+  var n = document.createElementNS(SVGNS, name);
+  for (var k in attrs) { n.setAttribute(k, attrs[k]); }
+  return n;
+}
+// "d3" -> {x, y} top-left of that square, white at the bottom.
+function sq(name) {
+  var f = name.charCodeAt(0) - 97;            // a=0 .. h=7
+  var r = parseInt(name.charAt(1), 10);       // 1..8
+  return { x: f * S, y: (8 - r) * S };
+}
+function parseFEN(fen) {
+  var rows = fen.split(" ")[0].split("/"), out = {};
+  for (var i = 0; i < 8; i++) {
+    var file = 0;
+    for (var j = 0; j < rows[i].length; j++) {
+      var c = rows[i].charAt(j);
+      if (c >= "1" && c <= "8") { file += parseInt(c, 10); }
+      else {
+        out[String.fromCharCode(97 + file) + (8 - i)] = c;
+        file += 1;
+      }
+    }
+  }
+  return out;
+}
+
+var board = document.getElementById("board");
+var pieces = parseFEN(FEN);
+var nodes = {};                               // square -> <text> element
+var hlLayer, pieceLayer;
+
+function build() {
+  // squares
+  for (var r = 8; r >= 1; r--) {
+    for (var f = 0; f < 8; f++) {
+      var name = String.fromCharCode(97 + f) + r, p = sq(name);
+      board.appendChild(el("rect", {
+        x: p.x, y: p.y, width: S, height: S,
+        fill: ((f + r) % 2 === 0) ? LIGHT : DARK   // a1 (0+1) odd = dark
+      }));
+    }
+  }
+  hlLayer = el("g", {}); board.appendChild(hlLayer);
+  pieceLayer = el("g", {}); board.appendChild(pieceLayer);
+
+  // coordinates
+  for (var i = 0; i < 8; i++) {
+    var fileLab = el("text", {
+      x: i * S + S - 6, y: 512 - 5, "text-anchor": "end",
+      "font-size": 11, fill: "#6f6252", "fill-opacity": 0.9,
+      "font-family": "Palatino, Georgia, serif"
+    });
+    fileLab.textContent = String.fromCharCode(97 + i);
+    board.appendChild(fileLab);
+    var rankLab = el("text", {
+      x: 5, y: i * S + 15,
+      "font-size": 11, fill: "#6f6252", "fill-opacity": 0.9,
+      "font-family": "Palatino, Georgia, serif"
+    });
+    rankLab.textContent = String(8 - i);
+    board.appendChild(rankLab);
+  }
+
+  for (var name in pieces) { placePiece(name, pieces[name]); }
+  document.getElementById("fen").textContent = FEN;
+}
+
+function placePiece(name, code) {
+  var p = sq(name);
+  var t = el("text", {
+    x: p.x + S / 2, y: p.y + S / 2,
+    "text-anchor": "middle", "dominant-baseline": "central",
+    "font-size": 50,
+    fill: (code === code.toUpperCase()) ? "#ffffff" : "#1b1b1b",
+    stroke: (code === code.toUpperCase()) ? "#1b1b1b" : "none",
+    "stroke-width": (code === code.toUpperCase()) ? 1.1 : 0,
+    "font-family": '"Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif'
+  });
+  t.textContent = GLYPH[code];
+  pieceLayer.appendChild(t);
+  nodes[name] = t;
+  return t;
+}
+
+function highlight(name, color, opacity) {
+  var p = sq(name);
+  hlLayer.appendChild(el("rect", {
+    x: p.x, y: p.y, width: S, height: S,
+    fill: color, "fill-opacity": (opacity === undefined ? 0.55 : opacity)
+  }));
+}
+
+// Animate a piece from one square to another over `ms`, then call done().
+function slide(name, to, ms, done) {
+  var node = nodes[name];
+  if (!node) { done && done(); return; }
+  var a = sq(name), b = sq(to);
+  var dx = b.x - a.x, dy = b.y - a.y, t0 = null;
+  function step(ts) {
+    if (t0 === null) { t0 = ts; }
+    var u = Math.min(1, (ts - t0) / ms);
+    var e = u < 0.5 ? 2 * u * u : -1 + (4 - 2 * u) * u;   // easeInOutQuad
+    node.setAttribute("transform", "translate(" + (dx * e) + "," + (dy * e) + ")");
+    if (u < 1) { requestAnimationFrame(step); }
+    else {
+      delete nodes[name];
+      nodes[to] = node;
+      done && done();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+var say = null;
+function tell(s) { say.textContent = s; }
+
+function sacrifice() {
+  var btn = document.getElementById("go");
+  btn.disabled = true;
+  highlight("d3", HL_FROM);
+  highlight("h7", HL_TO);
+  tell("Bxh7+ — the bishop goes.");
+  // hold a reference to the black h7 pawn before the bishop claims that square
+  var victim = nodes["h7"];
+  slide("d3", "h7", 900, function () {
+    if (victim && victim.parentNode) { victim.parentNode.removeChild(victim); }
+    setTimeout(function () {
+      highlight("g5", HL_NEXT, 0.45);
+      highlight("h5", HL_NEXT, 0.45);
+      tell("…Kxh7, then Ng5+ and Qh5#. g5 and h5 are where the game ends.");
+      btn.disabled = false;
+      btn.textContent = "Replay";
+      btn.onclick = function () { window.location.reload(); };
+    }, 550);
+  });
+}
+
+window.addEventListener("load", function () {
+  say = document.getElementById("say");
+  build();
+  document.getElementById("go").addEventListener("click", sacrifice);
+});
+</script>
+</body>
+</html>

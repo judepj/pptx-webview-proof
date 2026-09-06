@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ripple rate by patient</title>
+<!-- plotly.js pinned; loads over https from file:// too because the src is
+     protocol-absolute https, not protocol-relative. -->
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #ffffff; height: 100%; }
+  body {
+    font-family: Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    color: #222222;
+    display: flex; flex-direction: column;
+  }
+  #bar { padding: 14px 18px 4px 18px; display: flex; align-items: baseline; gap: 14px; }
+  #bar h1 { font-size: 17px; font-weight: normal; margin: 0; letter-spacing: .01em; }
+  #bar .sub { font-size: 13px; color: #777777; }
+  select {
+    font-family: inherit; font-size: 13px; color: #222222;
+    background: #ffffff; border: 1px solid #cccccc; border-radius: 3px;
+    padding: 3px 6px; margin-left: auto;
+  }
+  #plot { flex: 1 1 auto; min-height: 0; }
+  #err {
+    display: none; padding: 24px 18px; font-size: 14px; color: #a33;
+  }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <h1>Ripple rate by patient</h1>
+    <span class="sub">human Neuropixels &middot; 60&nbsp;s, 10&nbsp;s bins</span>
+    <select id="pick" aria-label="Series">
+      <option value="all" selected>All series</option>
+      <option value="Pt01 ripples">Pt01 &mdash; ripples (14)</option>
+      <option value="Pt02 ripples">Pt02 &mdash; ripples (119)</option>
+      <option value="Pt03 ripples">Pt03 &mdash; ripples (128)</option>
+      <option value="Pt03 fast ripples">Pt03 &mdash; fast ripples (49)</option>
+    </select>
+  </div>
+  <div id="plot"></div>
+  <div id="err">Could not load plotly.js (no network). The slide still shows the poster still.</div>
+
+<script>
+// Synthetic per-10-s bins, numpy default_rng(0) dirichlet+multinomial,
+// each row sums exactly to the published 60-s total.
+var BINS = {
+  "Pt01 ripples":      [4, 0, 2, 6, 2, 0],
+  "Pt02 ripples":      [14, 30, 26, 23, 17, 9],
+  "Pt03 ripples":      [19, 8, 25, 35, 32, 9],
+  "Pt03 fast ripples": [2, 14, 2, 3, 18, 10]
+};
+var COLOR = {
+  "Pt01 ripples":      "#4477aa",
+  "Pt02 ripples":      "#228833",
+  "Pt03 ripples":      "#cc6677",
+  "Pt03 fast ripples": "#aa7733"
+};
+var T = ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60"];
+var ORDER = ["Pt01 ripples", "Pt02 ripples", "Pt03 ripples", "Pt03 fast ripples"];
+
+// The line is the running total, not the rate — a rate line would just be the
+// bars divided by ten, redrawn.
+function cumulative(v) {
+  var s = 0;
+  return v.map(function (n) { s += n; return s; });
+}
+
+function traces(which) {
+  var keys = (which === "all") ? ORDER : [which];
+  var out = [];
+  keys.forEach(function (k) {
+    out.push({
+      type: "bar", name: k, x: T, y: BINS[k],
+      marker: { color: COLOR[k], opacity: 0.55, line: { width: 0 } },
+      hovertemplate: k + "<br>%{x} s &middot; %{y} events<extra></extra>"
+    });
+    out.push({
+      type: "scatter", mode: "lines+markers", name: k + " (cumulative)",
+      x: T, y: cumulative(BINS[k]), yaxis: "y2", showlegend: false,
+      line: { color: COLOR[k], width: 2 },
+      marker: { color: COLOR[k], size: 6 },
+      hovertemplate: k + "<br>%{y} events by %{x} s<extra></extra>"
+    });
+  });
+  return out;
+}
+
+var LAYOUT = {
+  paper_bgcolor: "#ffffff", plot_bgcolor: "#ffffff",
+  font: { family: 'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif',
+          size: 13, color: "#222222" },
+  margin: { l: 56, r: 56, t: 10, b: 44 },
+  barmode: "group", bargap: 0.28,
+  hovermode: "closest",
+  xaxis: { title: { text: "time in recording (s)" },
+           showgrid: false, zeroline: false, linecolor: "#999999" },
+  yaxis: { title: { text: "events per 10 s bin" },
+           showgrid: true, gridcolor: "#eeeeee", zeroline: false, linecolor: "#999999" },
+  yaxis2: { title: { text: "cumulative events" }, overlaying: "y", side: "right",
+            rangemode: "tozero",
+            showgrid: false, zeroline: false, linecolor: "#999999" },
+  legend: { orientation: "h", y: 1.12, x: 0, font: { size: 12 } }
+};
+
+var CONFIG = { displayModeBar: false, responsive: true };
+
+function draw(which) {
+  Plotly.react("plot", traces(which), LAYOUT, CONFIG);
+}
+
+window.addEventListener("load", function () {
+  if (typeof Plotly === "undefined") {
+    document.getElementById("err").style.display = "block";
+    return;
+  }
+  draw("all");
+  document.getElementById("pick").addEventListener("change", function (e) {
+    draw(e.target.value);
+  });
+});
+</script>
+</body>
+</html>
