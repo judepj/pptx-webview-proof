@@ -26,7 +26,11 @@
 </style>
 </head>
 <body>
-<iframe id="frame" allow="fullscreen; xr-spatial-tracking; autoplay; clipboard-read; clipboard-write"
+<!-- allow/sandbox lists follow peopleworks/powerpointwebviewer (MIT), which has
+     them tested against real embedded sites; xr-spatial-tracking added for three.js. -->
+<iframe id="frame"
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture; clipboard-read; clipboard-write; accelerometer; gyroscope; xr-spatial-tracking; web-share"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-downloads allow-modals"
         referrerpolicy="no-referrer-when-downgrade"></iframe>
 
 <div id="ask">
@@ -44,7 +48,12 @@
 <script>
 (function () {
   "use strict";
-  var SETTING = "src";                       // Office.js settings key
+  // Office.js settings keys, read in order.  "src" is ours; "webViewerUrl" is the
+  // key both the paid Web Viewer 2.0 add-in and peopleworks/powerpointwebviewer
+  // write, so a deck built for either one works here with only the reference id
+  // swapped.  We always WRITE "src".
+  var SETTING  = "src";
+  var FALLBACK = "webViewerUrl";
   var frame  = document.getElementById("frame");
   var ask    = document.getElementById("ask");
   var status = document.getElementById("status");
@@ -118,6 +127,7 @@
     try {
       settingsApi = Office.context.document.settings;
       url = settingsApi.get(SETTING);
+      if (!clean(url)) url = settingsApi.get(FALLBACK);
     } catch (e) { /* no settings API in this host */ }
     if (!clean(url)) url = queryParam("src");
     if (clean(url)) show(url); else prompt_();
