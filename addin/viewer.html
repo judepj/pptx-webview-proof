@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slide WebView</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden;
+               background:#fff; font:13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  #frame { position:absolute; inset:0; width:100%; height:100%; border:0; display:none; }
+  #status { position:absolute; left:0; right:0; bottom:0; padding:4px 8px;
+            background:#f4f3ef; color:#777; border-top:1px solid #e2e0da;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #ask { position:absolute; inset:0; display:none; flex-direction:column;
+         align-items:center; justify-content:center; gap:10px; padding:24px;
+         background:#fbfaf7; text-align:center; }
+  #ask h1 { font:400 20px/1.2 Palatino, Georgia, serif; color:#222; margin:0; }
+  #ask p  { margin:0; color:#777; max-width:34em; }
+  #row { display:flex; gap:8px; width:min(560px, 92%); }
+  #src { flex:1; padding:7px 9px; border:1px solid #ccc; border-radius:4px;
+         font:12px ui-monospace, Menlo, monospace; }
+  #go  { padding:7px 16px; border:1px solid #5a7fa0; border-radius:4px;
+         background:#5a7fa0; color:#fff; cursor:pointer; }
+  #go:hover { background:#4a6b8a; }
+</style>
+</head>
+<body>
+<iframe id="frame" allow="fullscreen; xr-spatial-tracking; autoplay; clipboard-read; clipboard-write"
+        referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+<div id="ask">
+  <h1>Slide WebView</h1>
+  <p>No page set yet. Paste an <code>https://</code> URL and press Go — it is
+     saved into the slide, so the deck remembers it.</p>
+  <div id="row">
+    <input id="src" type="url" placeholder="https://example.org/page.html" spellcheck="false">
+    <button id="go" type="button">Go</button>
+  </div>
+</div>
+
+<div id="status">loading…</div>
+
+<script>
+(function () {
+  "use strict";
+  var SETTING = "src";                       // Office.js settings key
+  var frame  = document.getElementById("frame");
+  var ask    = document.getElementById("ask");
+  var status = document.getElementById("status");
+  var input  = document.getElementById("src");
+  var settingsApi = null;                    // set once Office is ready
+
+  function say(msg)  { status.textContent = msg; status.style.display = "block"; }
+  function hideBar() { status.style.display = "none"; }
+
+  function queryParam(name) {
+    try {
+      var m = new RegExp("[?&]" + name + "=([^&]*)").exec(window.location.search);
+      return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : null;
+    } catch (e) { return null; }
+  }
+
+  function clean(u) {
+    if (typeof u !== "string") return null;
+    u = u.trim();
+    if (!u) return null;
+    // Office serialises string settings as JSON, so a stray pair of quotes is normal.
+    if (u.length > 1 && u.charAt(0) === '"' && u.charAt(u.length - 1) === '"') {
+      try { u = JSON.parse(u); } catch (e) { u = u.slice(1, -1); }
+    }
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    return u;
+  }
+
+  function show(url) {
+    url = clean(url);
+    if (!url) { prompt_(); return; }
+    ask.style.display = "none";
+    say("loading " + url + " …");
+    frame.onload = function () { hideBar(); };
+    frame.style.display = "block";
+    frame.src = url;
+    // Some sites never fire onload through the Office sandbox; clear the bar anyway.
+    setTimeout(hideBar, 6000);
+  }
+
+  function prompt_() {
+    frame.style.display = "none";
+    ask.style.display = "flex";
+    say("no URL set — enter one below");
+  }
+
+  function save(url) {
+    if (!settingsApi) return;
+    try {
+      settingsApi.set(SETTING, url);
+      settingsApi.saveAsync(function (r) {
+        if (r && r.status === Office.AsyncResultStatus.Failed) {
+          say("shown, but could not save into the slide: " + r.error.message);
+        }
+      });
+    } catch (e) { /* read-only host — showing the page still works */ }
+  }
+
+  document.getElementById("go").addEventListener("click", function () {
+    var url = clean(input.value);
+    if (!url) { input.focus(); return; }
+    save(url);
+    show(url);
+  });
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") document.getElementById("go").click();
+  });
+
+  function boot() {
+    var url = null;
+    try {
+      settingsApi = Office.context.document.settings;
+      url = settingsApi.get(SETTING);
+    } catch (e) { /* no settings API in this host */ }
+    if (!clean(url)) url = queryParam("src");
+    if (clean(url)) show(url); else prompt_();
+  }
+
+  if (typeof Office !== "undefined" && Office.onReady) {
+    Office.onReady(boot);
+  } else {
+    // office.js blocked or absent: still usable as a plain ?src= viewer.
+    window.addEventListener("load", function () {
+      var url = queryParam("src");
+      if (clean(url)) show(url); else prompt_();
+    });
+  }
+})();
+</script>
+</body>
+</html>
